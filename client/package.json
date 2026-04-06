@@ -1,8 +1,9 @@
 {
-  "name": "client",
+  "name": "alderrr.github.io",
   "private": true,
   "version": "0.0.0",
   "type": "module",
+  "homepage": "https://alderrr.github.io",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
@@ -12,8 +13,10 @@
   },
   "dependencies": {
     "@tailwindcss/vite": "^4.2.2",
+    "emailjs-com": "^3.2.0",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
+    "react-icons": "^5.6.0",
     "tailwindcss": "^4.2.2"
   },
   "devDependencies": {
