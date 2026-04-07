@@ -31,10 +31,10 @@ const experience = [
   },
   {
     period: "2016 — 2020",
-    title: "Bachelor Degree",
+    title: "Bachelor of Civil Engineering",
     organization: "Parahyangan Catholic University",
     description:
-      "Studied foundational concepts in problem solving, analytical thinking, and system design, providing a strong base for software development and technical problem solving.",
+      "Developed strong analytical and problem-solving skills, providing a foundation for transitioning into software development and building structured, scalable systems.",
   },
 ];
 
