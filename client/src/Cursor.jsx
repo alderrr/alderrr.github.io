@@ -4,6 +4,8 @@ function CursorLight() {
   const ballRef = useRef(null);
 
   useEffect(() => {
+    if (window.innerWidth < 768) return; // Disable in Mobile
+
     let mouse = { x: window.innerWidth / 2, y: window.innerHeight / 2 };
     let pos = { x: mouse.x, y: mouse.y };
     let velocity = { x: 0, y: 0 };

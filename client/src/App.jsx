@@ -11,6 +11,7 @@ import {
 import { SiTailwindcss } from "react-icons/si";
 import emailjs from "emailjs-com";
 import CursorLight from "./Cursor";
+import TouchRipple from "./Touch";
 
 const projects = [
   {
@@ -137,6 +138,7 @@ function App() {
   return (
     <>
       <CursorLight />
+      <TouchRipple />
       <div className="relative z-20">
         {toast && (
           <div className="fixed top-6 left-1/2 -translate-x-1/2 z-[999] animate-toast-center">
