@@ -2,107 +2,102 @@ import { useEffect, useRef } from "react";
 
 function CursorLight() {
   const ballRef = useRef(null);
+  const glowRef = useRef(null);
 
   useEffect(() => {
-    if (window.innerWidth < 768) return; // Disable in Mobile
+    if (window.innerWidth < 768) return;
 
     let mouse = { x: window.innerWidth / 2, y: window.innerHeight / 2 };
     let pos = { x: mouse.x, y: mouse.y };
     let velocity = { x: 0, y: 0 };
 
     let magneticTarget = null;
-    let currentColor = "rgba(34,211,238,0.35)";
-    let currentOpacity = 0.5;
+    let animationId = null;
 
-    const stiffness = 0.07;
-    const damping = 0.72;
+    const MAIN_COLOR = "rgba(34,211,238,0.26)";
+    let currentOpacity = 0.28;
 
-    const STOP_DISTANCE = 0.1;
-    const STOP_VELOCITY = 0.05;
+    // 🔥 tuned for “alive” feel
+    const stiffness = 0.05;
+    const damping = 0.78;
 
-    const move = (e) => {
+    const STOP_DISTANCE = 0.06;
+    const STOP_VELOCITY = 0.035;
+
+    const handleMove = (e) => {
       mouse.x = e.clientX;
       mouse.y = e.clientY;
     };
-    window.addEventListener("mousemove", move);
 
-    const targets = document.querySelectorAll(
-      "a, button, input, textarea, select",
-    );
+    window.addEventListener("mousemove", handleMove, { passive: true });
 
-    targets.forEach((el) => {
-      el.addEventListener("mouseenter", () => {
+    const targets = document.querySelectorAll("[data-magnetic]");
+
+    const enterHandlers = [];
+    const leaveHandlers = [];
+
+    targets.forEach((el, index) => {
+      const handleEnter = () => {
         magneticTarget = el;
-      });
-      el.addEventListener("mouseleave", () => {
-        magneticTarget = null;
-      });
+      };
+
+      const handleLeave = () => {
+        if (magneticTarget === el) {
+          magneticTarget = null;
+        }
+      };
+
+      enterHandlers[index] = handleEnter;
+      leaveHandlers[index] = handleLeave;
+
+      el.addEventListener("mouseenter", handleEnter);
+      el.addEventListener("mouseleave", handleLeave);
     });
-
-    const sectionColors = {
-      home: "rgba(34,211,238,0.35)",
-      about: "rgba(59,130,246,0.35)",
-      projects: "rgba(168,85,247,0.35)",
-      experience: "rgba(16,185,129,0.35)",
-      contact: "rgba(244,63,94,0.35)",
-    };
-
-    const observer = new IntersectionObserver(
-      (entries) => {
-        entries.forEach((entry) => {
-          if (entry.isIntersecting) {
-            currentColor = sectionColors[entry.target.id] || currentColor;
-          }
-        });
-      },
-      { threshold: 0.6 },
-    );
-
-    document.querySelectorAll("section").forEach((s) => observer.observe(s));
 
     let lastTime = performance.now();
 
     const animate = (time) => {
-      const delta = (time - lastTime) / 16;
+      const delta = Math.min((time - lastTime) / 16, 1.6);
       lastTime = time;
 
       let targetX = mouse.x;
       let targetY = mouse.y;
 
+      // 🔥 smoother magnetic (less aggressive)
       if (magneticTarget) {
         const rect = magneticTarget.getBoundingClientRect();
-        const cx = rect.left + rect.width / 2;
-        const cy = rect.top + rect.height / 2;
+        const cx = rect.left + rect.width * 0.5;
+        const cy = rect.top + rect.height * 0.5;
 
-        const distX = cx - mouse.x;
-        const distY = cy - mouse.y;
-        const distance = Math.sqrt(distX ** 2 + distY ** 2);
+        const dx = cx - mouse.x;
+        const dy = cy - mouse.y;
 
-        const maxDistance = 120;
+        const maxDist = 100;
+        const distSq = dx * dx + dy * dy;
 
-        if (distance < maxDistance) {
-          const strength = (1 - distance / maxDistance) * 0.35;
-          targetX += distX * strength;
-          targetY += distY * strength;
+        if (distSq < maxDist * maxDist) {
+          const dist = Math.sqrt(distSq);
+
+          // 🔥 smoother falloff curve
+          const strength = Math.pow(1 - dist / maxDist, 2) * 0.25;
+
+          targetX += dx * strength;
+          targetY += dy * strength;
         }
       }
 
       const dx = targetX - pos.x;
       const dy = targetY - pos.y;
 
-      const isSlow =
+      const isIdle =
         Math.abs(dx) < STOP_DISTANCE &&
         Math.abs(dy) < STOP_DISTANCE &&
         Math.abs(velocity.x) < STOP_VELOCITY &&
-        Math.abs(velocity.y) < STOP_VELOCITY;
+        Math.abs(velocity.y) < STOP_VELOCITY &&
+        !magneticTarget;
 
-      if (isSlow) {
-        pos.x += dx * 0.08;
-        pos.y += dy * 0.08;
-
-        velocity.x *= 0.6;
-        velocity.y *= 0.6;
-      } else {
+      // 🔥 skip unnecessary updates
+      if (!isIdle) {
         velocity.x += dx * stiffness * delta;
         velocity.y += dy * stiffness * delta;
 
@@ -113,54 +108,66 @@ function CursorLight() {
         pos.y += velocity.y;
       }
 
-      const speed = Math.sqrt(velocity.x ** 2 + velocity.y ** 2);
-      const stretch = Math.min(speed * 0.02, 0.25);
+      const speedSq = velocity.x * velocity.x + velocity.y * velocity.y;
+
+      // 🔥 softer stretch (less rubbery)
+      const stretch = Math.min(speedSq * 0.012, 0.12);
 
       const scaleX = 1 + stretch;
       const scaleY = 1 - stretch;
 
       const angle =
-        speed > 0.1 ? Math.atan2(velocity.y, velocity.x) * (180 / Math.PI) : 0;
+        speedSq > 0.001
+          ? Math.atan2(velocity.y, velocity.x) * (180 / Math.PI)
+          : 0;
 
-      const targetOpacity = magneticTarget ? 0.2 : 0.5;
+      // 🔥 subtle breathing opacity
+      const targetOpacity = magneticTarget ? 0.16 : 0.28;
       currentOpacity += (targetOpacity - currentOpacity) * 0.06;
 
       if (ballRef.current) {
-        // ONLY wrapper moves/rotates/scales
         ballRef.current.style.transform = `
           translate3d(${pos.x}px, ${pos.y}px, 0)
           rotate(${angle}deg)
           scale(${scaleX}, ${scaleY})
         `;
-
-        const glow = ballRef.current.querySelector(".glow");
-        if (glow) {
-          glow.style.background = currentColor;
-          glow.style.opacity = currentOpacity;
-        }
       }
 
-      requestAnimationFrame(animate);
+      if (glowRef.current) {
+        glowRef.current.style.background = MAIN_COLOR;
+        glowRef.current.style.opacity = currentOpacity;
+      }
+
+      animationId = requestAnimationFrame(animate);
     };
 
-    animate(lastTime);
+    animationId = requestAnimationFrame(animate);
 
     return () => {
-      window.removeEventListener("mousemove", move);
-      observer.disconnect();
+      window.removeEventListener("mousemove", handleMove);
+
+      targets.forEach((el, index) => {
+        el.removeEventListener("mouseenter", enterHandlers[index]);
+        el.removeEventListener("mouseleave", leaveHandlers[index]);
+      });
+
+      if (animationId) cancelAnimationFrame(animationId);
     };
   }, []);
 
   return (
     <div
       ref={ballRef}
-      className="pointer-events-none fixed top-0 left-0 z-10 mix-blend-screen"
+      className="pointer-events-none fixed top-0 left-0 z-10 hidden md:block will-change-transform transform-gpu"
     >
       {/* core */}
-      <div className="absolute w-5 h-5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-white/70 blur-[1px]" />
+      <div className="absolute h-3.5 w-3.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-white/85 blur-[0.5px]" />
 
-      {/* glow (NO transform inheritance issues now) */}
-      <div className="glow absolute w-16 h-16 -translate-x-1/2 -translate-y-1/2 rounded-full blur-xl opacity-50" />
+      {/* glow */}
+      <div
+        ref={glowRef}
+        className="absolute h-10 w-10 -translate-x-1/2 -translate-y-1/2 rounded-full blur-md"
+      />
     </div>
   );
 }

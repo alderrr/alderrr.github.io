@@ -1,46 +1,25 @@
 @import "tailwindcss";
 
-/* =========================================================
-   BASE TYPOGRAPHY
-========================================================= */
-
-h1 {
-  letter-spacing: -0.02em;
-}
-
-/* =========================================================
-   GLOBAL SETTINGS
-========================================================= */
-
-html {
-  scroll-behavior: smooth;
-}
-
-section {
-  scroll-margin-top: 4rem;
-}
-
 :root {
   color-scheme: dark;
 }
 
-/* =========================================================
-   RESET
-========================================================= */
-
-* {
-  box-sizing: border-box;
+/* -------------------------------
+   BASE
+--------------------------------*/
+html {
+  scroll-behavior: smooth;
 }
 
 body {
   margin: 0;
   min-width: 320px;
-
-  background:
-    radial-gradient(circle at top, rgba(59, 130, 246, 0.15), transparent 30%),
-    linear-gradient(180deg, #0b1020 0%, #090d18 35%, #050816 100%);
-
   color: #e5e7eb;
+
+  /* 🔥 lighter + cheaper gradient */
+  background:
+    radial-gradient(circle at top, rgba(59, 130, 246, 0.06), transparent 32%),
+    linear-gradient(180deg, #0b1020 0%, #090d18 36%, #050816 100%);
 
   font-family:
     Inter,
@@ -50,171 +29,142 @@ body {
     BlinkMacSystemFont,
     "Segoe UI",
     sans-serif;
+
+  font-display: swap;
+
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+
+  /* 🔥 prevents layout thrash on scrollbar */
+  overflow-y: scroll;
 }
 
-/* =========================================================
-   UTILITIES
-========================================================= */
+* {
+  box-sizing: border-box;
+}
 
+/* -------------------------------
+   TYPOGRAPHY
+--------------------------------*/
+h1 {
+  letter-spacing: -0.02em;
+  will-change: transform;
+}
+
+/* -------------------------------
+   SELECTION
+--------------------------------*/
 ::selection {
-  background: rgba(59, 130, 246, 0.35);
+  background: rgba(59, 130, 246, 0.28);
   color: #ffffff;
 }
 
-/* =========================================================
-   SCROLL REVEAL ANIMATION
-========================================================= */
+/* -------------------------------
+   SECTION SPACING
+--------------------------------*/
+section {
+  scroll-margin-top: 2rem;
+}
 
+/* -------------------------------
+   REVEAL ANIMATION (TUNED)
+--------------------------------*/
 .reveal {
   opacity: 0;
-  transform: translateY(40px) scale(0.98);
+  transform: translate3d(0, 20px, 0);
 
+  /* 🔥 faster = more premium */
   transition:
-    opacity 0.8s cubic-bezier(0.22, 1, 0.36, 1),
-    transform 0.8s cubic-bezier(0.22, 1, 0.36, 1);
+    opacity 0.45s cubic-bezier(0.22, 1, 0.36, 1),
+    transform 0.45s cubic-bezier(0.22, 1, 0.36, 1);
+
+  will-change: opacity, transform;
 }
 
 .reveal.show {
   opacity: 1;
-  transform: translateY(0) scale(1);
+  transform: translate3d(0, 0, 0);
+
+  /* 🔥 reset GPU hint after animation */
+  will-change: auto;
 }
 
-/* delay utilities */
 .delay-1 {
-  transition-delay: 0.15s;
+  transition-delay: 0.06s;
 }
 
 .delay-2 {
-  transition-delay: 0.3s;
+  transition-delay: 0.12s;
 }
 
-/* =========================================================
-   HOVER EFFECTS
-========================================================= */
-
+/* -------------------------------
+   HOVER SYSTEM (LINEAR STYLE)
+--------------------------------*/
 .hover-lift {
-  transition:
-    transform 0.3s ease,
-    box-shadow 0.3s ease;
+  transition: transform 0.18s cubic-bezier(0.22, 1, 0.36, 1);
+  will-change: transform;
+  transform: translate3d(0, 0, 0);
 }
 
 .hover-lift:hover {
-  transform: translateY(-6px);
+  transform: translate3d(0, -4px, 0);
 }
 
-/* =========================================================
-   TOAST ANIMATION
-========================================================= */
+/* -------------------------------
+   INTERACTION SMOOTHING
+--------------------------------*/
 
-@keyframes toastIn {
-  from {
-    opacity: 0;
-    transform: translateY(-10px) translateX(10px);
+/* 🔥 removes delay on touch devices */
+button,
+a,
+input,
+textarea {
+  touch-action: manipulation;
+}
+
+/* 🔥 prevent accidental double tap zoom delay */
+a,
+button {
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* -------------------------------
+   GPU OPTIMIZATION HELPERS
+--------------------------------*/
+.transform-gpu {
+  transform: translateZ(0);
+}
+
+.will-change-transform {
+  will-change: transform;
+}
+
+/* -------------------------------
+   SCROLL PERFORMANCE
+--------------------------------*/
+
+/* 🔥 smoother scroll compositing */
+html,
+body {
+  overscroll-behavior: none;
+}
+
+/* -------------------------------
+   REDUCED MOTION (ACCESSIBILITY)
+--------------------------------*/
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
   }
-  to {
-    opacity: 1;
-    transform: translateY(0) translateX(0);
+
+  .reveal,
+  .reveal.show,
+  .hover-lift,
+  .hover-lift:hover {
+    transition: none !important;
+    transform: none !important;
+    opacity: 1 !important;
+    will-change: auto !important;
   }
-}
-
-.animate-toast-in {
-  animation: toastIn 0.3s ease;
-}
-
-/* =========================================================
-   ICON EFFECTS
-========================================================= */
-
-.text-4xl {
-  font-size: 3rem;
-}
-
-.hover\:text-sky-500:hover {
-  color: #38bdf8; /* sky-500 */
-}
-
-/* =========================================================
-   SOFT ACCENT SURFACES
-========================================================= */
-
-.soft-panel {
-  background: linear-gradient(
-    180deg,
-    rgba(255, 255, 255, 0.06) 0%,
-    rgba(255, 255, 255, 0.03) 100%
-  );
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  backdrop-filter: blur(14px);
-}
-
-.soft-panel-blue {
-  background:
-    linear-gradient(
-      180deg,
-      rgba(56, 189, 248, 0.08) 0%,
-      rgba(255, 255, 255, 0.03) 100%
-    ),
-    rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(56, 189, 248, 0.12);
-  backdrop-filter: blur(14px);
-}
-
-.section-accent-glow {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  overflow: hidden;
-}
-
-.section-accent-glow::before {
-  content: "";
-  position: absolute;
-  top: 8%;
-  left: 10%;
-  width: 240px;
-  height: 240px;
-  border-radius: 9999px;
-  background: rgba(56, 189, 248, 0.1);
-  filter: blur(70px);
-}
-
-.section-accent-glow::after {
-  content: "";
-  position: absolute;
-  right: 8%;
-  bottom: 10%;
-  width: 220px;
-  height: 220px;
-  border-radius: 9999px;
-  background: rgba(59, 130, 246, 0.08);
-  filter: blur(72px);
-}
-
-.input-premium {
-  background: rgba(15, 23, 42, 0.82);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  transition:
-    border-color 0.25s ease,
-    box-shadow 0.25s ease,
-    background 0.25s ease;
-}
-
-.input-premium:focus {
-  outline: none;
-  border-color: rgba(56, 189, 248, 0.35);
-  box-shadow: 0 0 0 4px rgba(56, 189, 248, 0.1);
-  background: rgba(15, 23, 42, 0.92);
-}
-
-.contact-link {
-  transition:
-    border-color 0.25s ease,
-    background 0.25s ease,
-    transform 0.25s ease;
-}
-
-.contact-link:hover {
-  border-color: rgba(56, 189, 248, 0.2);
-  background: rgba(255, 255, 255, 0.08);
-  transform: translateY(-2px);
 }

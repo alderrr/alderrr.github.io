@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   FiExternalLink,
   FiCheckCircle,
@@ -20,8 +20,14 @@ import {
   SiOpenai,
   SiVite,
 } from "react-icons/si";
-import { motion } from "framer-motion";
-import emailjs from "emailjs-com";
+import {
+  // eslint-disable-next-line no-unused-vars
+  motion,
+  useReducedMotion,
+  useScroll,
+  useSpring,
+  useTransform,
+} from "framer-motion";
 import CursorLight from "./Cursor";
 import TouchRipple from "./Touch";
 
@@ -60,6 +66,32 @@ const experience = [
   },
 ];
 
+const navItems = [
+  { id: "about", label: "About" },
+  { id: "projects", label: "Projects" },
+  { id: "experience", label: "Experience" },
+  { id: "contact", label: "Contact" },
+];
+
+const sectionPerformanceStyle = {
+  contentVisibility: "auto",
+  containIntrinsicSize: "900px",
+};
+
+const springFast = {
+  type: "spring",
+  stiffness: 360,
+  damping: 28,
+  mass: 0.45,
+};
+
+const springCard = {
+  type: "spring",
+  stiffness: 280,
+  damping: 24,
+  mass: 0.55,
+};
+
 function App() {
   const [activeSection, setActiveSection] = useState("home");
   const [status, setStatus] = useState("idle");
@@ -70,11 +102,82 @@ function App() {
     email: "",
     message: "",
   });
+  const [effectsReady, setEffectsReady] = useState(false);
 
-  const handleChange = (e) => {
+  const toastTimeoutRef = useRef(null);
+  const idleCallbackRef = useRef(null);
+  const timeoutFallbackRef = useRef(null);
+  const emailJsModuleRef = useRef(null);
+  const isManualScrollingRef = useRef(false);
+  const scrollTimeoutRef = useRef(null);
+
+  const prefersReducedMotion = useReducedMotion();
+
+  const { scrollY } = useScroll();
+  const rawHeroY = useTransform(
+    scrollY,
+    [0, 700],
+    [0, prefersReducedMotion ? 0 : 56],
+  );
+  const rawHeroGlowY = useTransform(
+    scrollY,
+    [0, 700],
+    [0, prefersReducedMotion ? 0 : 84],
+  );
+  const rawHeroOpacity = useTransform(
+    scrollY,
+    [0, 350],
+    [1, prefersReducedMotion ? 1 : 0.82],
+  );
+
+  const heroY = useSpring(rawHeroY, {
+    stiffness: 120,
+    damping: 22,
+    mass: 0.35,
+  });
+  const heroGlowY = useSpring(rawHeroGlowY, {
+    stiffness: 110,
+    damping: 24,
+    mass: 0.4,
+  });
+  const heroOpacity = useSpring(rawHeroOpacity, {
+    stiffness: 140,
+    damping: 26,
+    mass: 0.4,
+  });
+
+  const techStack = useMemo(
+    () => [
+      { icon: <FaReact />, name: "React" },
+      { icon: <SiVite />, name: "Vite" },
+      { icon: <FaNodeJs />, name: "Node.js" },
+      { icon: <SiTailwindcss />, name: "Tailwind" },
+      { icon: <FaHtml5 />, name: "HTML5" },
+      { icon: <FaCss3Alt />, name: "CSS3" },
+      { icon: <FaGitAlt />, name: "Git" },
+      { icon: <SiOpenai />, name: "OpenAI" },
+      { icon: <SiGooglegemini />, name: "Gemini" },
+    ],
+    [],
+  );
+
+  const warmEmailJs = useCallback(async () => {
+    if (!emailJsModuleRef.current) {
+      emailJsModuleRef.current = import("emailjs-com").then(
+        (module) => module.default,
+      );
+    }
+
+    return emailJsModuleRef.current;
+  }, []);
+
+  const handleChange = useCallback((e) => {
     const { name, value } = e.target;
 
-    setForm((prev) => ({ ...prev, [name]: value }));
+    setForm((prev) => {
+      if (prev[name] === value) return prev;
+      return { ...prev, [name]: value };
+    });
 
     setErrors((prev) => {
       if (!prev[name]) return prev;
@@ -82,9 +185,9 @@ function App() {
       delete next[name];
       return next;
     });
-  };
+  }, []);
 
-  const validateForm = () => {
+  const validateForm = useCallback(() => {
     const nextErrors = {};
 
     if (!form.name.trim()) {
@@ -104,146 +207,218 @@ function App() {
     }
 
     return nextErrors;
-  };
+  }, [form]);
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
+  const showToast = useCallback((type, message) => {
+    setToast({ type, message });
 
-    const validationErrors = validateForm();
-
-    if (Object.keys(validationErrors).length > 0) {
-      setErrors(validationErrors);
-      setStatus("error");
-      return;
+    if (toastTimeoutRef.current) {
+      clearTimeout(toastTimeoutRef.current);
     }
 
-    setErrors({});
-    setStatus("loading");
+    toastTimeoutRef.current = setTimeout(() => {
+      setToast(null);
+    }, 3000);
+  }, []);
 
-    try {
-      await emailjs.send(
-        "service_5jsh6yr",
-        "template_k4dl3hv",
-        form,
-        "bX-lOjexAuPkZDJiJ",
-      );
+  const handleSubmit = useCallback(
+    async (e) => {
+      e.preventDefault();
 
-      setStatus("success");
-      setForm({ name: "", email: "", message: "" });
+      const validationErrors = validateForm();
 
-      setToast({
-        type: "success",
-        message: "Message sent successfully!",
-      });
-    } catch (error) {
-      console.log(error);
-      setStatus("error");
+      if (Object.keys(validationErrors).length > 0) {
+        setErrors(validationErrors);
+        setStatus("error");
+        return;
+      }
 
-      setToast({
-        type: "error",
-        message: "Failed to send message. Try again.",
-      });
-    }
+      setErrors({});
+      setStatus("loading");
 
-    setTimeout(() => setToast(null), 3000);
-  };
+      try {
+        const emailjs = await warmEmailJs();
+
+        await emailjs.send(
+          "service_5jsh6yr",
+          "template_k4dl3hv",
+          form,
+          "bX-lOjexAuPkZDJiJ",
+        );
+
+        setStatus("success");
+        setForm({ name: "", email: "", message: "" });
+        showToast("success", "Message sent successfully!");
+      } catch (error) {
+        console.log(error);
+        setStatus("error");
+        showToast("error", "Failed to send message.");
+      }
+    },
+    [form, showToast, validateForm, warmEmailJs],
+  );
 
   useEffect(() => {
-    const sections = document.querySelectorAll("section");
+    if ("requestIdleCallback" in window) {
+      idleCallbackRef.current = window.requestIdleCallback(
+        () => setEffectsReady(true),
+        { timeout: 500 },
+      );
+    } else {
+      timeoutFallbackRef.current = window.setTimeout(() => {
+        setEffectsReady(true);
+      }, 280);
+    }
 
-    const observer = new IntersectionObserver(
-      (entries) => {
-        entries.forEach((entry) => {
-          if (entry.isIntersecting) {
-            setActiveSection(entry.target.id);
-          }
-        });
-      },
-      {
-        rootMargin: "-25% 0px -55% 0px",
-        threshold: 0,
-      },
-    );
+    return () => {
+      if (idleCallbackRef.current && "cancelIdleCallback" in window) {
+        window.cancelIdleCallback(idleCallbackRef.current);
+      }
 
-    sections.forEach((section) => observer.observe(section));
-
-    return () => observer.disconnect();
+      if (timeoutFallbackRef.current) {
+        clearTimeout(timeoutFallbackRef.current);
+      }
+    };
   }, []);
 
   useEffect(() => {
-    const elements = document.querySelectorAll(".reveal");
+    const sections = Array.from(document.querySelectorAll("section"));
+    if (!sections.length) return;
 
-    const observer = new IntersectionObserver(
+    const sectionObserver = new IntersectionObserver(
+      (entries) => {
+        let visibleSection = null;
+
+        for (const entry of entries) {
+          if (entry.isIntersecting) {
+            visibleSection = entry.target.id;
+          }
+        }
+
+        if (visibleSection && !isManualScrollingRef.current) {
+          setActiveSection((prev) =>
+            prev === visibleSection ? prev : visibleSection,
+          );
+        }
+      },
+      {
+        rootMargin: "-20% 0px -55% 0px",
+        threshold: 0.1,
+      },
+    );
+
+    sections.forEach((section) => sectionObserver.observe(section));
+
+    return () => {
+      sectionObserver.disconnect();
+    };
+  }, []);
+
+  useEffect(() => {
+    const elements = Array.from(document.querySelectorAll(".reveal"));
+    if (!elements.length) return;
+
+    const revealObserver = new IntersectionObserver(
       (entries, observer) => {
-        entries.forEach((entry) => {
+        for (const entry of entries) {
           if (entry.isIntersecting) {
             entry.target.classList.add("show");
             observer.unobserve(entry.target);
           }
-        });
+        }
       },
-      { threshold: 0.15 },
+      {
+        rootMargin: "0px 0px -12% 0px",
+        threshold: 0.01,
+      },
     );
 
-    elements.forEach((el) => observer.observe(el));
+    elements.forEach((el) => revealObserver.observe(el));
 
-    return () => observer.disconnect();
+    return () => {
+      revealObserver.disconnect();
+    };
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (toastTimeoutRef.current) {
+        clearTimeout(toastTimeoutRef.current);
+      }
+    };
   }, []);
 
   return (
     <>
-      <CursorLight />
-      <TouchRipple />
+      {effectsReady && <CursorLight />}
+      {effectsReady && <TouchRipple />}
+
       <div className="relative z-20">
         {toast && (
-          <div className="fixed top-6 left-1/2 -translate-x-1/2 z-[999] animate-toast-center">
+          <motion.div
+            initial={
+              prefersReducedMotion ? false : { opacity: 0, y: -10, scale: 0.98 }
+            }
+            animate={prefersReducedMotion ? {} : { opacity: 1, y: 0, scale: 1 }}
+            exit={
+              prefersReducedMotion ? {} : { opacity: 0, y: -8, scale: 0.98 }
+            }
+            transition={springFast}
+            className="fixed top-6 left-1/2 z-[999] -translate-x-1/2 will-change-transform"
+          >
             <div
-              className={`px-6 py-4 rounded-2xl backdrop-blur-xl border shadow-xl
-        flex items-center gap-3 text-sm font-medium
-        ${
-          toast.type === "success"
-            ? "bg-green-500/10 border-green-400/30 text-green-300"
-            : "bg-red-500/10 border-red-400/30 text-red-300"
-        }`}
+              className={`flex items-center gap-3 rounded-2xl border px-5 py-3 text-sm font-medium shadow-sm ${
+                toast.type === "success"
+                  ? "border-green-400/20 bg-slate-900/95 text-green-300"
+                  : "border-red-400/20 bg-slate-900/95 text-red-300"
+              }`}
             >
-              <span className="text-xl flex items-center">
-                {toast.type === "success" ? (
-                  <FiCheckCircle className="text-green-400 scale-110" />
-                ) : (
-                  <FiXCircle className="text-red-400" />
-                )}
+              <span className="text-lg">
+                {toast.type === "success" ? <FiCheckCircle /> : <FiXCircle />}
               </span>
-
               <span>{toast.message}</span>
             </div>
-          </div>
+          </motion.div>
         )}
+
         <div className="min-h-screen text-slate-200">
-          {/* Header */}
-          <header className="sticky top-0 z-50 border-b border-white/10 bg-slate-950/70 backdrop-blur-xl">
+          <header className="sticky top-0 z-50 border-b border-white/8 bg-slate-950/80 backdrop-blur-sm">
             <div className="mx-auto max-w-7xl px-6 py-4 sm:px-8 lg:px-12">
-              <div className="flex items-center justify-between rounded-full border border-white/10 bg-white/5 px-4 py-3 backdrop-blur-md sm:px-5">
-                <a
+              <div className="flex items-center justify-between rounded-full border border-white/8 bg-slate-900/70 px-4 py-3 sm:px-5">
+                <motion.a
                   href="#home"
+                  data-magnetic
+                  whileTap={prefersReducedMotion ? undefined : { scale: 0.985 }}
+                  transition={springFast}
                   className="text-sm font-semibold tracking-[0.22em] text-white"
                 >
                   ALDER.DEV
-                </a>
+                </motion.a>
 
-                <nav className="hidden md:flex items-center gap-2">
-                  {[
-                    { id: "about", label: "About" },
-                    { id: "projects", label: "Projects" },
-                    { id: "experience", label: "Experience" },
-                    { id: "contact", label: "Contact" },
-                  ].map((item) => {
+                <nav className="hidden items-center gap-2 md:flex">
+                  {navItems.map((item) => {
                     const isActive = activeSection === item.id;
 
                     return (
-                      <a
+                      <motion.a
                         key={item.id}
                         href={`#${item.id}`}
-                        className={`relative rounded-full px-4 py-2 text-sm transition-colors duration-300 ${
+                        onClick={() => {
+                          if (scrollTimeoutRef.current) {
+                            clearTimeout(scrollTimeoutRef.current);
+                          }
+                          isManualScrollingRef.current = true;
+                          setActiveSection(item.id);
+                          scrollTimeoutRef.current = setTimeout(() => {
+                            isManualScrollingRef.current = false;
+                          }, 500);
+                        }}
+                        data-magnetic
+                        whileTap={
+                          prefersReducedMotion ? undefined : { scale: 0.98 }
+                        }
+                        transition={springFast}
+                        className={`relative rounded-full px-4 py-2 text-sm transition-colors duration-150 ${
                           isActive
                             ? "text-white"
                             : "text-slate-400 hover:text-white"
@@ -252,17 +427,17 @@ function App() {
                         {isActive && (
                           <motion.span
                             layoutId="navbar-active-pill"
-                            className="absolute inset-0 rounded-full bg-white/10"
+                            className="absolute inset-0 rounded-full bg-white/8"
                             transition={{
                               type: "spring",
-                              stiffness: 380,
-                              damping: 30,
+                              stiffness: 420,
+                              damping: 32,
+                              mass: 0.5,
                             }}
                           />
                         )}
-
                         <span className="relative z-10">{item.label}</span>
-                      </a>
+                      </motion.a>
                     );
                   })}
                 </nav>
@@ -270,58 +445,112 @@ function App() {
             </div>
           </header>
 
-          {/* Hero */}
-          <section id="home">
-            <div className="mx-auto max-w-7xl px-6 py-20 sm:px-8 lg:px-12 min-h-[80vh] flex items-center">
-              <div className="max-w-2xl">
+          <section id="home" className="relative overflow-hidden">
+            {!prefersReducedMotion && (
+              <>
+                <motion.div
+                  aria-hidden="true"
+                  style={{ y: heroGlowY }}
+                  className="pointer-events-none absolute inset-x-0 top-[-10rem] mx-auto h-[24rem] w-[24rem] rounded-full bg-sky-400/8 blur-3xl"
+                />
+                <motion.div
+                  aria-hidden="true"
+                  style={{ y: heroY }}
+                  className="pointer-events-none absolute right-[8%] top-[20%] hidden h-40 w-40 rounded-full bg-white/4 blur-2xl lg:block"
+                />
+              </>
+            )}
+
+            <div className="mx-auto flex min-h-[80vh] max-w-7xl items-center px-6 py-20 sm:px-8 lg:px-12">
+              <motion.div
+                style={
+                  prefersReducedMotion
+                    ? undefined
+                    : { y: heroY, opacity: heroOpacity }
+                }
+                className="max-w-2xl will-change-transform transform-gpu"
+              >
                 <p className="reveal text-sm uppercase tracking-[0.18em] text-sky-400">
                   Full-Stack JavaScript Developer
                 </p>
 
-                <h1 className="reveal mt-4 text-4xl sm:text-6xl font-bold text-white leading-tight">
+                <h1 className="reveal mt-5 max-w-[18ch] text-4xl sm:text-6xl leading-[1.1] tracking-[-0.02em] font-semibold text-white">
                   I build scalable web apps with{" "}
-                  <span className="text-sky-400">clean architecture</span> and{" "}
+                  <span className="text-white">clean architecture</span> and{" "}
                   <span className="text-sky-400">great user experience</span>
                 </h1>
 
-                <p className="reveal delay-1 mt-6 text-lg text-slate-300 leading-8">
+                <p className="reveal delay-1 mt-6 max-w-[48ch] text-base sm:text-lg leading-relaxed text-slate-400">
                   I specialize in React, Node.js, and modern web technologies to
                   deliver performant, maintainable, and production-ready
                   applications.
                 </p>
 
                 <div className="reveal delay-2 mt-8 flex gap-4">
-                  <a
+                  <motion.a
                     href="#projects"
-                    className="bg-sky-500 px-6 py-3 rounded-lg text-black font-semibold hover:bg-sky-400 transition"
+                    onClick={() => {
+                      setActiveSection("projects");
+                    }}
+                    data-magnetic
+                    whileHover={
+                      prefersReducedMotion
+                        ? undefined
+                        : {
+                            y: -2,
+                            scale: 1.015,
+                            boxShadow: "0 10px 30px rgba(56,189,248,0.18)",
+                          }
+                    }
+                    whileTap={
+                      prefersReducedMotion ? undefined : { scale: 0.985 }
+                    }
+                    transition={springFast}
+                    className="rounded-lg bg-sky-500 px-6 py-3 font-semibold text-black transition-colors duration-150 hover:bg-sky-400 will-change-transform transform-gpu"
                   >
                     Explore Projects
-                  </a>
+                  </motion.a>
 
-                  <a
+                  <motion.a
                     href="#contact"
-                    className="border border-white/20 px-6 py-3 rounded-lg hover:bg-white/10 transition"
+                    onClick={() => {
+                      setActiveSection("contact");
+                    }}
+                    data-magnetic
+                    whileHover={
+                      prefersReducedMotion
+                        ? undefined
+                        : {
+                            y: -2,
+                            scale: 1.012,
+                            backgroundColor: "rgba(255,255,255,0.05)",
+                          }
+                    }
+                    whileTap={
+                      prefersReducedMotion ? undefined : { scale: 0.985 }
+                    }
+                    transition={springFast}
+                    className="rounded-lg border border-white/15 px-6 py-3 transition-colors duration-150 will-change-transform transform-gpu"
                   >
                     Contact Me
-                  </a>
+                  </motion.a>
                 </div>
-              </div>
+              </motion.div>
             </div>
           </section>
 
-          {/* About */}
-          <section id="about">
+          <section id="about" style={sectionPerformanceStyle}>
             <div className="mx-auto max-w-7xl px-6 py-24 sm:px-8 lg:px-12">
               <h2 className="reveal text-3xl font-bold text-white">About Me</h2>
 
-              <p className="reveal delay-1 mt-6 text-slate-300 max-w-2xl leading-7">
+              <p className="reveal delay-1 mt-6 max-w-2xl leading-7 text-slate-300">
                 I’m a Full-Stack JavaScript Developer focused on building
                 scalable and maintainable web applications. I enjoy solving
                 complex problems and turning ideas into reliable, user-friendly
                 products.
               </p>
 
-              <p className="reveal delay-1 mt-4 text-slate-300 max-w-2xl leading-7">
+              <p className="reveal delay-1 mt-4 max-w-2xl leading-7 text-slate-300">
                 My work combines strong front-end experience with solid back-end
                 architecture, allowing me to deliver complete solutions from
                 concept to deployment.
@@ -331,38 +560,30 @@ function App() {
                 Core stack & tools
               </p>
 
-              {/* Tech Stack Icons */}
-              <div className="mt-6 flex flex-wrap gap-4 sm:gap-6 text-3xl text-sky-400">
-                {[
-                  { icon: <FaReact />, name: "React" },
-                  { icon: <SiVite />, name: "Vite" },
-                  { icon: <FaNodeJs />, name: "Node.js" },
-                  { icon: <SiTailwindcss />, name: "Tailwind" },
-                  { icon: <FaHtml5 />, name: "HTML5" },
-                  { icon: <FaCss3Alt />, name: "CSS3" },
-                  { icon: <FaGitAlt />, name: "Git" },
-                  { icon: <SiOpenai />, name: "OpenAI" },
-                  { icon: <SiGooglegemini />, name: "Gemini" },
-                ].map((item, i) => (
-                  <div
-                    key={i}
-                    className="rounded-xl border border-white/10 bg-white/5 p-3 transition hover:bg-white/10"
+              <div className="mt-6 flex flex-wrap gap-4 text-3xl text-sky-400 sm:gap-6">
+                {techStack.map((item) => (
+                  <motion.div
+                    key={item.name}
                     title={item.name}
+                    whileHover={
+                      prefersReducedMotion ? undefined : { y: -2, scale: 1.03 }
+                    }
+                    transition={springFast}
+                    className="rounded-xl border border-white/8 bg-slate-900/60 p-3 transition-colors duration-150 hover:bg-slate-900 will-change-transform transform-gpu"
                   >
                     {item.icon}
-                  </div>
+                  </motion.div>
                 ))}
               </div>
             </div>
           </section>
 
-          {/* Projects */}
-          <section id="projects" className="scroll-mt-32">
+          <section id="projects" style={sectionPerformanceStyle}>
             <div className="mx-auto max-w-7xl px-6 py-24 sm:px-8 lg:px-12">
               <div className="max-w-2xl">
                 <h2 className="text-3xl font-bold text-white">Projects</h2>
 
-                <p className="mt-4 text-slate-400 leading-7">
+                <p className="mt-4 leading-7 text-slate-400">
                   Selected work showcasing my approach to building scalable and
                   maintainable web applications.
                 </p>
@@ -370,9 +591,19 @@ function App() {
 
               <div className="mt-12 grid gap-6 md:grid-cols-2 lg:grid-cols-3">
                 {projects.map((project) => (
-                  <div
+                  <motion.div
                     key={project.title}
-                    className="reveal hover-lift flex flex-col rounded-2xl border border-white/10 bg-white/5 p-6 backdrop-blur-xl transition-all duration-300 hover:border-sky-400/15 hover:bg-white/10"
+                    whileHover={
+                      prefersReducedMotion
+                        ? undefined
+                        : {
+                            y: -4,
+                            scale: 1.01,
+                            borderColor: "rgba(255,255,255,0.12)",
+                          }
+                    }
+                    transition={springCard}
+                    className="reveal hover-lift flex flex-col rounded-2xl border border-white/8 bg-slate-900/60 p-6 transition-transform duration-150 will-change-transform transform-gpu"
                   >
                     <h3 className="text-xl font-semibold text-white">
                       {project.title}
@@ -386,7 +617,7 @@ function App() {
                       {project.tech.map((tech) => (
                         <span
                           key={tech}
-                          className="rounded-full border border-white/10 bg-slate-900/60 px-3 py-1 text-xs text-slate-200"
+                          className="rounded-full border border-white/8 bg-slate-950/70 px-3 py-1 text-xs text-slate-200"
                         >
                           {tech}
                         </span>
@@ -394,291 +625,358 @@ function App() {
                     </div>
 
                     <div className="mt-6 flex items-center gap-3">
-                      <a
+                      <motion.a
                         href={project.live}
                         target="_blank"
                         rel="noreferrer"
-                        className="inline-flex h-11 w-11 items-center justify-center rounded-xl border border-white/10 bg-slate-900/60 transition hover:border-sky-400/20 hover:bg-slate-900 hover:text-sky-400"
+                        data-magnetic
+                        whileHover={
+                          prefersReducedMotion
+                            ? undefined
+                            : { y: -2, scale: 1.05 }
+                        }
+                        whileTap={
+                          prefersReducedMotion ? undefined : { scale: 0.97 }
+                        }
+                        transition={springFast}
+                        className="inline-flex h-11 w-11 items-center justify-center rounded-xl border border-white/8 bg-slate-950/70 transition-colors duration-150 hover:text-sky-400 will-change-transform transform-gpu"
                       >
                         <FiExternalLink size={18} />
-                      </a>
+                      </motion.a>
 
-                      <a
+                      <motion.a
                         href={project.github}
                         target="_blank"
                         rel="noreferrer"
-                        className="inline-flex h-11 w-11 items-center justify-center rounded-xl border border-white/10 bg-slate-900/60 transition hover:border-white/20 hover:bg-slate-900 hover:text-white"
+                        data-magnetic
+                        whileHover={
+                          prefersReducedMotion
+                            ? undefined
+                            : { y: -2, scale: 1.05 }
+                        }
+                        whileTap={
+                          prefersReducedMotion ? undefined : { scale: 0.97 }
+                        }
+                        transition={springFast}
+                        className="inline-flex h-11 w-11 items-center justify-center rounded-xl border border-white/8 bg-slate-950/70 transition-colors duration-150 hover:text-white will-change-transform transform-gpu"
                       >
                         <FaGithub size={18} />
-                      </a>
+                      </motion.a>
                     </div>
-                  </div>
+                  </motion.div>
                 ))}
               </div>
             </div>
           </section>
 
-          {/* Experience */}
-          <section id="experience">
+          <section id="experience" style={sectionPerformanceStyle}>
             <div className="mx-auto max-w-7xl px-6 py-24 sm:px-8 lg:px-12">
               <h2 className="text-3xl font-bold text-white">Experience</h2>
 
               <div className="mt-8 space-y-6">
-                {experience.map((item, index) => (
-                  <div
-                    key={index}
-                    className="reveal border-l border-white/20 pl-4"
+                {experience.map((item) => (
+                  <motion.div
+                    key={`${item.period}-${item.title}`}
+                    whileHover={prefersReducedMotion ? undefined : { x: 2 }}
+                    transition={springFast}
+                    className="reveal border-l border-white/15 pl-4 will-change-transform transform-gpu"
                   >
                     <p className="text-sm text-slate-400">{item.period}</p>
                     <h3 className="text-lg font-semibold text-white">
                       {item.title}
                     </h3>
-                    <p className="text-sky-400 text-sm">{item.organization}</p>
-                    <p className="text-slate-300 text-sm mt-2">
+                    <p className="text-sm text-sky-400">{item.organization}</p>
+                    <p className="mt-2 text-sm text-slate-300">
                       {item.description}
                     </p>
-                  </div>
+                  </motion.div>
                 ))}
               </div>
             </div>
           </section>
 
-          {/* Contact */}
-          <section id="contact" className="relative">
-            <div className="pointer-events-none absolute inset-0 overflow-hidden">
-              <div className="absolute left-10 top-10 h-40 w-40 rounded-full bg-sky-500/10 blur-3xl" />
-              <div className="absolute bottom-0 right-10 h-40 w-40 rounded-full bg-blue-500/10 blur-3xl" />
-            </div>
-
-            <div className="relative mx-auto max-w-7xl px-6 py-24 sm:px-8 lg:px-12">
+          <section
+            id="contact"
+            className="relative"
+            style={sectionPerformanceStyle}
+          >
+            <div className="mx-auto max-w-7xl px-6 py-24 sm:px-8 lg:px-12">
               <div className="max-w-2xl">
                 <p className="text-sm font-medium uppercase tracking-[0.18em] text-sky-400">
                   Contact
                 </p>
+
                 <h2 className="mt-3 text-3xl font-bold text-white sm:text-4xl">
                   Let’s work together
                 </h2>
-                <p className="mt-4 text-sm leading-7 text-slate-300 sm:text-base">
-                  Have a project, collaboration, or opportunity in mind? Send me
-                  a message through the form or reach out directly by email.
+
+                <p className="mt-4 text-sm leading-7 text-slate-400 sm:text-base">
+                  Have a project or opportunity in mind? Send a message or reach
+                  out directly.
                 </p>
               </div>
 
-              <div className="mt-10 grid gap-6 lg:grid-cols-[0.9fr_1.1fr]">
-                {/* Direct Contact */}
-                <div className="reveal rounded-2xl border border-white/10 bg-white/5 p-6 backdrop-blur-xl transition">
+              <div className="mt-12 grid gap-6 lg:grid-cols-[0.9fr_1.1fr]">
+                <motion.div
+                  whileHover={prefersReducedMotion ? undefined : { y: -2 }}
+                  transition={springCard}
+                  className="rounded-2xl border border-white/8 bg-slate-900/70 p-6 will-change-transform transform-gpu"
+                >
                   <h3 className="text-lg font-semibold text-white">
                     Direct contact
                   </h3>
-                  <p className="mt-2 text-sm leading-6 text-slate-400">
-                    Prefer email? Reach out directly and I’ll get back to you as
-                    soon as possible.
+
+                  <p className="mt-2 text-sm text-slate-400">
+                    Prefer email? I’ll respond as soon as possible.
                   </p>
 
                   <div className="mt-6 space-y-3">
-                    <a
-                      href="mailto:your@email.com"
-                      className="group flex items-center gap-4 rounded-xl border border-white/10 bg-slate-900/70 px-4 py-4 transition hover:border-sky-400/20 hover:bg-slate-900"
+                    <motion.a
+                      href="mailto:alifdermayudha@gmail.com"
+                      data-magnetic
+                      whileHover={
+                        prefersReducedMotion
+                          ? undefined
+                          : { y: -2, scale: 1.01 }
+                      }
+                      whileTap={
+                        prefersReducedMotion ? undefined : { scale: 0.99 }
+                      }
+                      transition={springFast}
+                      className="flex items-center gap-4 rounded-xl border border-white/8 px-4 py-4 transition-colors duration-150 hover:border-sky-400/30 will-change-transform transform-gpu"
                     >
                       <div className="flex h-10 w-10 items-center justify-center rounded-full bg-sky-400/10 text-sky-300">
                         <FiMail size={18} />
                       </div>
 
-                      <div className="min-w-0">
+                      <div>
                         <p className="text-xs uppercase tracking-[0.14em] text-sky-400">
                           Email
                         </p>
-                        <p className="truncate text-sm font-medium text-white">
+                        <p className="text-sm font-medium text-white">
                           alifdermayudha@gmail.com
                         </p>
                       </div>
-                    </a>
+                    </motion.a>
 
-                    <a
+                    <motion.a
                       href="https://www.linkedin.com/in/dermayudha/"
                       target="_blank"
                       rel="noreferrer"
-                      className="group flex items-center gap-4 rounded-xl border border-white/10 bg-slate-900/70 px-4 py-4 transition hover:border-sky-400/20 hover:bg-slate-900"
+                      data-magnetic
+                      whileHover={
+                        prefersReducedMotion
+                          ? undefined
+                          : { y: -2, scale: 1.01 }
+                      }
+                      whileTap={
+                        prefersReducedMotion ? undefined : { scale: 0.99 }
+                      }
+                      transition={springFast}
+                      className="flex items-center gap-4 rounded-xl border border-white/8 px-4 py-4 transition-colors duration-150 hover:border-sky-400/30 will-change-transform transform-gpu"
                     >
                       <div className="flex h-10 w-10 items-center justify-center rounded-full bg-sky-400/10 text-sky-300">
                         <FaLinkedin size={18} />
                       </div>
 
-                      <div className="min-w-0">
+                      <div>
                         <p className="text-xs uppercase tracking-[0.14em] text-sky-400">
                           LinkedIn
                         </p>
-                        <p className="truncate text-sm font-medium text-white">
+                        <p className="text-sm font-medium text-white">
                           Alif Dermayudha
                         </p>
                       </div>
-                    </a>
+                    </motion.a>
                   </div>
 
-                  <div className="mt-6 rounded-xl border border-white/10 bg-slate-900/50 px-4 py-4">
+                  <div className="mt-6 border-t border-white/8 pt-6">
                     <p className="text-xs uppercase tracking-[0.14em] text-sky-400">
                       Availability
                     </p>
-                    <p className="mt-2 text-sm leading-6 text-slate-300">
-                      Open to full-time opportunities, freelance projects, and
-                      meaningful collaborations.
+                    <p className="mt-2 text-sm text-slate-400">
+                      Open to full-time roles, freelance projects, and
+                      collaborations.
                     </p>
                   </div>
-                </div>
+                </motion.div>
 
-                {/* Form */}
-                <form
+                <motion.form
                   onSubmit={handleSubmit}
+                  onPointerEnter={warmEmailJs}
+                  onFocus={warmEmailJs}
                   noValidate
-                  className="reveal rounded-2xl border border-white/10 bg-white/5 p-6 backdrop-blur-xl transition"
+                  whileHover={prefersReducedMotion ? undefined : { y: -2 }}
+                  transition={springCard}
+                  className="rounded-2xl border border-white/8 bg-slate-900/70 p-6 will-change-transform transform-gpu"
                 >
                   <div className="grid gap-4 sm:grid-cols-2">
-                    <div className="sm:col-span-1">
-                      <label className="mb-2 block text-sm font-medium text-white">
+                    <div>
+                      <label className="mb-2 block text-sm text-slate-300">
                         Name
                       </label>
+
                       <input
                         type="text"
                         name="name"
                         value={form.name}
                         onChange={handleChange}
                         placeholder="Your name"
-                        className={`w-full rounded-xl border px-4 py-3 text-sm text-white placeholder:text-slate-500 outline-none transition-all duration-300 ${
+                        className={`w-full rounded-xl touch-manipulation border px-4 py-3 text-sm text-white outline-none transition-colors duration-150 placeholder:text-slate-500 ${
                           errors.name
-                            ? "border-red-400/40 bg-slate-900"
-                            : "border-white/10 bg-slate-900/80 focus:border-sky-400/40 focus:bg-slate-900 focus:ring-4 focus:ring-sky-400/10"
+                            ? "border-red-400/40 bg-slate-950"
+                            : "border-white/8 bg-slate-950 focus:border-sky-400/40"
                         }`}
                       />
-                      <div
-                        className={`grid transition-all duration-300 ease-out ${
-                          errors.name
-                            ? "mt-2 grid-rows-[1fr] opacity-100"
-                            : "mt-0 grid-rows-[0fr] opacity-0"
+
+                      <p
+                        className={`mt-2 text-sm text-red-300 transition-opacity duration-150 ${
+                          errors.name ? "opacity-100" : "h-0 opacity-0"
                         }`}
                       >
-                        <div className="overflow-hidden">
-                          <p className="text-sm text-red-300">
-                            {errors.name || ""}
-                          </p>
-                        </div>
-                      </div>
+                        {errors.name || ""}
+                      </p>
                     </div>
 
-                    <div className="sm:col-span-1">
-                      <label className="mb-2 block text-sm font-medium text-white">
+                    <div>
+                      <label className="mb-2 block text-sm text-slate-300">
                         Email
                       </label>
+
                       <input
                         type="email"
                         name="email"
                         value={form.email}
                         onChange={handleChange}
                         placeholder="you@example.com"
-                        className={`w-full rounded-xl border px-4 py-3 text-sm text-white placeholder:text-slate-500 outline-none transition-all duration-300 ${
+                        className={`w-full rounded-xl touch-manipulation border px-4 py-3 text-sm text-white outline-none transition-colors duration-150 placeholder:text-slate-500 ${
                           errors.email
-                            ? "border-red-400/40 bg-slate-900"
-                            : "border-white/10 bg-slate-900/80 focus:border-sky-400/40 focus:bg-slate-900 focus:ring-4 focus:ring-sky-400/10"
+                            ? "border-red-400/40 bg-slate-950"
+                            : "border-white/8 bg-slate-950 focus:border-sky-400/40"
                         }`}
                       />
-                      <div
-                        className={`grid transition-all duration-300 ease-out ${
-                          errors.email
-                            ? "mt-2 grid-rows-[1fr] opacity-100"
-                            : "mt-0 grid-rows-[0fr] opacity-0"
+
+                      <p
+                        className={`mt-2 text-sm text-red-300 transition-opacity duration-150 ${
+                          errors.email ? "opacity-100" : "h-0 opacity-0"
                         }`}
                       >
-                        <div className="overflow-hidden">
-                          <p className="text-sm text-red-300">
-                            {errors.email || ""}
-                          </p>
-                        </div>
-                      </div>
+                        {errors.email || ""}
+                      </p>
                     </div>
 
                     <div className="sm:col-span-2">
-                      <label className="mb-2 block text-sm font-medium text-white">
+                      <label className="mb-2 block text-sm text-slate-300">
                         Message
                       </label>
+
                       <textarea
                         name="message"
                         value={form.message}
                         onChange={handleChange}
-                        placeholder="Tell me about your project or opportunity..."
-                        rows="6"
-                        className={`w-full resize-none rounded-xl border px-4 py-3 text-sm text-white placeholder:text-slate-500 outline-none transition-all duration-300 ${
+                        rows="5"
+                        placeholder="Tell me about your project..."
+                        className={`w-full resize-none rounded-xl touch-manipulation border px-4 py-3 text-sm text-white outline-none transition-colors duration-150 placeholder:text-slate-500 ${
                           errors.message
-                            ? "border-red-400/40 bg-slate-900"
-                            : "border-white/10 bg-slate-900/80 focus:border-sky-400/40 focus:bg-slate-900 focus:ring-4 focus:ring-sky-400/10"
+                            ? "border-red-400/40 bg-slate-950"
+                            : "border-white/8 bg-slate-950 focus:border-sky-400/40"
                         }`}
-                      ></textarea>
-                      <div
-                        className={`grid transition-all duration-300 ease-out ${
-                          errors.message
-                            ? "mt-2 grid-rows-[1fr] opacity-100"
-                            : "mt-0 grid-rows-[0fr] opacity-0"
+                      />
+
+                      <p
+                        className={`mt-2 text-sm text-red-300 transition-opacity duration-150 ${
+                          errors.message ? "opacity-100" : "h-0 opacity-0"
                         }`}
                       >
-                        <div className="overflow-hidden">
-                          <p className="text-sm text-red-300">
-                            {errors.message || ""}
-                          </p>
-                        </div>
-                      </div>
+                        {errors.message || ""}
+                      </p>
                     </div>
                   </div>
 
                   <div className="mt-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-                    <p className="text-sm text-slate-400">
-                      I’ll get back to you as soon as possible.
+                    <p className="text-sm text-slate-500">
+                      I’ll get back to you shortly.
                     </p>
 
-                    <button
+                    <motion.button
+                      type="submit"
                       disabled={status === "loading"}
-                      className="inline-flex items-center justify-center gap-2 rounded-xl bg-sky-500 px-6 py-3 text-sm font-semibold text-slate-950 transition hover:bg-sky-400 disabled:opacity-60"
+                      data-magnetic
+                      whileHover={
+                        prefersReducedMotion || status === "loading"
+                          ? undefined
+                          : {
+                              y: -2,
+                              scale: 1.015,
+                              boxShadow: "0 10px 28px rgba(56,189,248,0.16)",
+                            }
+                      }
+                      whileTap={
+                        prefersReducedMotion || status === "loading"
+                          ? undefined
+                          : { scale: 0.985 }
+                      }
+                      transition={springFast}
+                      className="inline-flex items-center justify-center gap-2 rounded-xl bg-sky-500 px-6 py-3 text-sm font-semibold text-slate-950 transition-colors duration-150 hover:bg-sky-400 disabled:opacity-60 will-change-transform transform-gpu"
                     >
                       {status === "loading" ? (
                         <>
-                          <span className="h-4 w-4 animate-spin rounded-full border-2 border-slate-950 border-t-transparent"></span>
-                          Sending...
+                          <span className="h-4 w-4 animate-spin rounded-full border-2 border-slate-950 border-t-transparent" />
+                          Sending
                         </>
                       ) : (
-                        "Send Message"
+                        "Send"
                       )}
-                    </button>
+                    </motion.button>
                   </div>
-                </form>
+                </motion.form>
               </div>
             </div>
           </section>
 
-          <footer className="border-t border-white/10 mt-10">
-            <div className="mx-auto max-w-7xl px-6 py-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between text-sm text-slate-400">
-              {/* Left */}
+          <footer className="mt-8 border-t border-white/8">
+            <div className="mx-auto flex max-w-7xl flex-col gap-4 px-6 py-6 text-sm text-slate-400 sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <p>© 2026 Alif Dermayudha</p>
-                <p className="text-xs text-slate-500 mt-1">
-                  Built with React, Vite & Tailwind CSS
+                <p className="mt-1 text-xs text-slate-600">
+                  Built with React, Vite, Tailwind CSS, & OpenAI
                 </p>
               </div>
 
-              {/* Right */}
-              <div className="flex gap-4">
-                <a
+              <div className="flex gap-6">
+                <motion.a
                   href="https://github.com/alderrr"
                   target="_blank"
                   rel="noreferrer"
-                  className="hover:text-white transition"
+                  data-magnetic
+                  whileHover={
+                    prefersReducedMotion
+                      ? undefined
+                      : { y: -2, color: "#ffffff" }
+                  }
+                  whileTap={prefersReducedMotion ? undefined : { scale: 0.97 }}
+                  transition={springFast}
+                  className="text-slate-400 transition-all duration-150 will-change-transform transform-gpu"
                 >
                   GitHub
-                </a>
-                <a
+                </motion.a>
+
+                <motion.a
                   href="https://www.linkedin.com/in/dermayudha/"
                   target="_blank"
                   rel="noreferrer"
-                  className="hover:text-white transition"
+                  data-magnetic
+                  whileHover={
+                    prefersReducedMotion
+                      ? undefined
+                      : { y: -2, color: "#ffffff" }
+                  }
+                  whileTap={prefersReducedMotion ? undefined : { scale: 0.97 }}
+                  transition={springFast}
+                  className="text-slate-400 transition-all duration-150 will-change-transform transform-gpu"
                 >
                   LinkedIn
-                </a>
+                </motion.a>
               </div>
             </div>
           </footer>
